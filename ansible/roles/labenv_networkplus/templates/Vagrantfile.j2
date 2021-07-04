@@ -6,9 +6,9 @@ Vagrant.configure("2") do |config|
   # These settings are defaults for all VMs unless overridden
   #===========================================================
   config.ssh.private_key_path= "~/keys/vagrant"
-  config.vm.box = "debian-10.6.0"
+  config.vm.box = "debian-10.8.0"
   config.vm.synced_folder ".", "/vagrant", disabled: true
-  config.vm.synced_folder ".", "/vagrant"
+  config.vm.synced_folder "labfiles/", "/labfiles", SharedFoldersEnableSymlinksCreate: false
   config.vm.provider :virtualbox do |vboxvm|
     #vboxvm.gui = false
     vboxvm.memory = 1024
@@ -42,19 +42,6 @@ Vagrant.configure("2") do |config|
       end
     end
   end
-
-  #==========================
-  # Infrastructure Hosts
-  #==========================
-
-#  (10..12).each do |addr_host|
-#    addr_net = "10.1.1"
-#    config.vm.define "dhcp-#{addr_net}.#{addr_host}", autostart: false  do |node|
-#      node.vm.provider "virtualbox" do |vboxvm|
-#        vboxvm.name = "dhcp-#{addr_net}.#{addr_host}"
-#      end
-#    end
-#  end
 
   #==========================
   # Windows VM

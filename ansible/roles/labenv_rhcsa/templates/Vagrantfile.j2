@@ -1,49 +1,41 @@
 # -*- mode: ruby -*-
-# vi: set ft=jinja2 :
+# vi: set ft=ruby :
 
 Vagrant.configure("2") do |config|
   config.ssh.private_key_path = "{{ key_dir }}/vagrant"
   # These are the VM configuration defaults when not overridden
-  config.vm.box = "centos-8.2.2004"
+  config.vm.box = "{{ box_name }}"
   config.vm.synced_folder "labfiles/", "/labfiles"
   config.vm.synced_folder ".", "/vagrant", disabled: true
-  {% if virtualization == "virtualbox" %}
-  config.vm.provider :virtualbox do |vboxvm|
-    vboxvm.gui = false
-    vboxvm.memory = 1024
-    vboxvm.customize ["modifyvm", :id, "--firmware", "EFI"]
-    vboxvm.customize ["modifyvm", :id, "--cableconnected1", "on"]
-    vboxvm.customize ["modifyvm", :id, "--nic2", "natnetwork"]
-    vboxvm.customize ["modifyvm", :id, "--nat-network2", "RHCSA Network"]
-    {% if ansible_distribution == 'MacOSX' %}
-    vboxvm.customize ["setextradata", :id, "GUI/ScaleFactor", "2.0"]
-    {% endif %}
+{% if virtualization == "virtualbox" %}
+  config.vm.provider :virtualbox do |virtualbox|
+    virtualbox.gui = false
+    virtualbox.memory = 1024
+    virtualbox.customize ["modifyvm", :id, "--firmware", "EFI"]
+    virtualbox.customize ["modifyvm", :id, "--cableconnected1", "on"]
+    virtualbox.customize ["modifyvm", :id, "--nic2", "natnetwork"]
+    virtualbox.customize ["modifyvm", :id, "--nat-network2", "RHCSA Network"]
+{% if ansible_distribution == 'MacOSX' %}
+    virtualbox.customize ["setextradata", :id, "GUI/ScaleFactor", "2.0"]
+{% endif %}
   end
-  {% elif virtualization == "libvirt" %}
+{% elif virtualization == "libvirt" %}
   config.vm.provider :libvirt do |libvirt|
     libvirt.driver = "kvm"
     libvirt.host = "localhost"
     libvirt.uri = 'qemu:///system'
     libvirt.memory = 1024
   end
-  {% endif %}
+{% endif %}
   config.vm.provision :ansible do |ansible|
-    ansible.playbook = "ansible/vagrant-vm-playbook.yml"
+    ansible.playbook = "ansible/site.yml"
     ansible.skip_tags = "disabled"
     ansible.groups = {
-      "ipa_client" => [
-        "server1","server2",
-      ],
-      "ipa_server" => [
-        "labipa"
-      ],
       "rhcsa8" => [
-        "labipa",
         "server1",
         "server2",
-        "control",
-        "ansible1",
-        "andible2"
+        "exam1",
+        "exam2"
       ],
       "rhcsa8:vars" => { "ansible_python_interpreter" => "/usr/bin/python3" },
       "examhost" => [
@@ -53,101 +45,105 @@ Vagrant.configure("2") do |config|
     }
   end
 
-  #==============================
-  #==  CentOS 8.x Lab Machines ==
-  #==============================
-  #=== labipa ===
-  config.vm.define "labipa" do |node|
-    node.vm.box = "centos-8.2.2004"
-    {% if virtualization == "virtualbox" %}
+  #====================
+  #==  Lab Machines  ==
+  #====================
+  #=== server1 ==
+  config.vm.define "server1" do |node|
+    node.vm.box = "{{ box_name }}"
+{% if virtualization == "virtualbox" %}
     node.vm.provider :virtualbox do |virtualbox|
-      virtualbox.name = "rhcsa_labipa"
+      virtualbox.name = "server1"
       virtualbox.memory = 2048
     end
-    {% elif virtualization == "libvirt" %}
-    node.vm.provider :libvirt do |libvirt|
-      libvirt.memory = 2048
-    end
-    {% endif %}
-  end
-
-  #=== server1 ===
-  config.vm.define "server1" do |node|
-    node.vm.box = "centos-8.2.2004"
-    node.vm.provider :virtualbox do |virtualbox|
-      virtualbox.name = "rhcsa_server1"
-    end
+{% endif %}
   end
 
   #=== server2 ===
   config.vm.define "server2" do |node|
-    node.vm.box = "centos-8.2.2004"
+    node.vm.box = "{{ box_name }}"
+{% if virtualization == "virtualbox" %}
+    disk = "#{ENV["HOME"]}/VirtualBox VMs/server2/server2_disk2.vmdk"
     node.vm.provider :virtualbox do |virtualbox|
-      virtualbox.name = "rhcsa_server2"
+      virtualbox.name = "server2"
+      # Create and attach a new, empty disk with the same name
+      if not File.file?(disk)
+        virtualbox.customize ['createhd', '--filename', disk, '--variant',
+          'Standard', '--size', 20 * 1024]
+        virtualbox.customize ["storageattach", :id,
+          "--storagectl", "SATA Controller",
+          "--type", "hdd",
+          "--port", "1",
+          "--device", "0",
+          "--medium", disk]
+      end
     end
-  #  node.vm.provider :virtualbox do |virtualbox|
-  #    virtualbox.storage :file, :bus => :sata
-  #  end
-  end
-
-  #=========================
-  #==  Machines for RHCE  ==
-  #=========================
-  #=== control ===
-  config.vm.define "control", autostart: false do |node|
-    {% if virtualization == "virtualbox" %}
-    node.vm.provider :virtualbox do |virtualbox|
-      virtualbox.name = "control"
-    end
-    {% endif %}
-  end
-
-  #=== ansible1 ===
-  config.vm.define "ansible1", autostart: false do |node|
-    {% if virtualization == "virtualbox" %}
-    node.vm.provider :virtualbox do |virtualbox|
-      virtualbox.name = "ansible1"
-    end
-    {% endif %}
-  end
-
-  #=== ansible2 ===
-  config.vm.define "ansible2", autostart: false do |node|
-    {% if virtualization == "virtualbox" %}
-    node.vm.provider :virtualbox do |virtualbox|
-      virtualbox.name = "ansible2"
-    end
-    {% endif %}
+{% endif %}
   end
 
   #==============================
   #==  Additional Lab Machines ==
   #==============================
-  {# VirtualBox VMs do not support PXE boot without the use
+{# VirtualBox VMs do not support PXE boot without the use
      of the extension pack which is licensed software.
-  #}
-  {% if virtualization == "virtualbox" %}
+#}
+{% if virtualization == "virtualbox" %}
   #=== installhost ===
   config.vm.define "installhost", autostart: false do |node|
-    node.vm.box = "centos-8.2.2004"
-    node.vm.disk :disk, name: "empty", size: "20GB"
-    node.vm.disk :dvd, name: "installation_media", file: "/Users/user/Downloads/CentOS-8.2.2004-x86_64-dvd1.iso"
+    node.vm.box = "{{ box_name }}"
+    disk = "#{ENV["HOME"]}/VirtualBox VMs/installhost/{{ box_name }}-disk001.vmdk"
+    disk1 = "#{ENV["HOME"]}/VirtualBox VMs/installhost/installhost-disk001.vmdk"
+    disk2 = "#{ENV["HOME"]}/VirtualBox VMs/installhost/installhost-disk002.vmdk"
     node.vm.provider :virtualbox do |virtualbox|
-      virtualbox.name = "rhcsa_installhost"
+      virtualbox.name = "installhost"
       virtualbox.gui = true
       virtualbox.memory = 2048
+      # Dettach and destroy original disk
+      if File.file?(disk)
+        virtualbox.customize ["storageattach", :id,
+          "--storagectl", "SATA Controller",
+          "--port", "0",
+          "--device", "0",
+          "--medium", 'none']
+        virtualbox.customize ['closemedium', 'disk', disk, '--delete']
+      end
+      # Create and attach a new, empty disk
+      if not File.file?(disk1)
+        virtualbox.customize ['createhd', '--filename', disk1, '--variant',
+          'Standard', '--size', 20 * 1024]
+        virtualbox.customize ["storageattach", :id,
+          "--storagectl", "SATA Controller",
+          "--type", "hdd",
+          "--port", "0",
+          "--device", "0",
+          "--medium", disk1]
+      end
+      # Create and attach a new, empty, secondary disk
+      if not File.file?(disk2)
+        virtualbox.customize ['createhd', '--filename', disk2, '--variant',
+          'Standard', '--size', 20 * 1024]
+        virtualbox.customize ["storageattach", :id,
+          "--storagectl", "SATA Controller",
+          "--type", "hdd",
+          "--port", "1",
+          "--device", "0",
+          "--medium", disk2]
+      end
+      # Make sure the installation media is in the drive
       virtualbox.customize ["storageattach", :id,
-        "--storagectl", "SATA Controller",
+        "--storagectl", "IDE Controller",
+        "--type", "dvddrive",
         "--port", "0",
         "--device", "0",
-        "--medium", "none"]
+        "--medium", "#{ENV["HOME"]}/Downloads/{{ box_iso }}"]
+      # virtualbox.customize ["modifyvm", :id, "--boot1", "DVD", "--boot2", "disk"]
     end
     node.vm.provision "default", type: :shell, run: "never" do |shell|
       shell.inline = "echo"
     end
   end
-  {% endif %}
-  {% if virtualization == "libvirt" %}
+{% endif %}
+{% if virtualization == "libvirt" %}
   #=== pxeclient ===
   config.vm.define :pxeclient, autostart: false do |pxeclient|
     pxeclient.vm.provider :libvirt do |domain|
@@ -158,18 +154,24 @@ Vagrant.configure("2") do |config|
       domain.boot 'hd'
     end
   #end
-  {% endif %}
+{% endif %}
 
   #===================================
   #==  Machines for practice exams  ==
   #===================================
   #=== exam1 ===
   config.vm.define "exam1", autostart: false do |node|
-    node.vm.box = "centos-8.2.2004"
+    node.vm.box = "{{ box_name }}"
+    node.vm.provider :virtualbox do |virtualbox|
+      virtualbox.name = "exam1"
+    end
   end
 
   #=== exam2 ===
   config.vm.define "exam2", autostart: false do |node|
-    node.vm.box = "centos-8.2.2004"
+    node.vm.box = "{{ box_name }}"
+    node.vm.provider :virtualbox do |virtualbox|
+      virtualbox.name = "exam2"
+    end
   end
 end
